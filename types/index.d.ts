@@ -26,6 +26,7 @@ declare type LoginUser = {
 };
 
 declare type User = {
+  [x: string]: any;
   $id: string;
   email: string;
   userId: string;
@@ -33,6 +34,7 @@ declare type User = {
   dwollaCustomerId: string;
   firstName: string;
   lastName: string;
+  name: string;
   address1: string;
   city: string;
   state: string;
@@ -210,6 +212,7 @@ declare interface TotlaBalanceBoxProps {
 
 declare interface FooterProps {
   user: User;
+  type?: 'mobile' |  'desktop'
 }
 
 declare interface RightSidebarProps {

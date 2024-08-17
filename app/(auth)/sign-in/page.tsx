@@ -2,7 +2,7 @@ import AuthForm from '@/components/AuthForm'
 
 
 
-const SignIn = async () => {
+const SignIn = () => {
 
  
   return (

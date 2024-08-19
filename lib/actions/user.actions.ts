@@ -1,6 +1,5 @@
 'use server'
-
-import { ID } from "node-appwrite";
+import { ID, Query } from "node-appwrite";
 import { createAdminClient, createSessionClient } from "./appwrite";
 import { cookies } from "next/headers";
 import { encryptId, extractCustomerIdFromUrl, parseStringify } from "../utils";
@@ -15,85 +14,99 @@ const {
   APPWRITE_BANK_COLLECTION_ID: BANK_COLLECTION_ID,
 } = process.env;
 
+export const getUserInfo = async ({ userId }: getUserInfoProps) => {
+  try {
+    const { database } = await createAdminClient();
 
-
-export const signIn = async ({email, password}: 
-  signInProps ) => {
-    try {
-      const { account } = await createAdminClient();
-
-      const response = await account.
-      createEmailPasswordSession(email, password);
-
-
-       return parseStringify(response);
-
-    } catch (error) {
-        console.error('Error', error)
-    }
-}
-
-
- export const signUp = async ({ password, ...userData }: SignUpParams) => {
-    const{ email, firstName, lastName } =  userData;
-
-    let newUserAccount;
-    try {
-        const { account, database } = await createAdminClient();
-
-  newUserAccount = await account.create(
-    ID.unique(),
-    email,
-    password,
-    `${firstName} ${lastName}`
+    const user = await database.listDocuments(
+      DATABASE_ID!,
+      USER_COLLECTION_ID!,
+      [Query.equal("userId", [userId])]
     );
 
-    if (!newUserAccount) throw new Error('Error creating user')
-
-      const dwollaCustomerUrl = await createDwollaCustomer({
-        ...userData,
-        type: 'personal'
-
-      })
-
-      if(!dwollaCustomerUrl) throw new Error('Error creating Dwolla customer')
-
-        const dwollaCustomerId = extractCustomerIdFromUrl(dwollaCustomerUrl);
-
-        const newUser = await database.createDocument(
-          DATABASE_ID!,
-          USER_COLLECTION_ID!,
-          ID.unique(),
-          {
-            ...userData,
-            userId: newUserAccount.$id,
-            dwollaCustomerId,
-            dwollaCustomerUrl,
-
-          }
-
-        )
-
-        
+    return parseStringify(user.documents[0]);
+  } catch (error) {
+    console.log(error);
+  }
+};
 
 
-  const session = await account.
-  createEmailPasswordSession(email, password);
 
-  cookies().set("appwrite-session", session.secret, {
-    path: "/",
-    httpOnly: true,
-    sameSite: "strict",
-    secure: true,
-  });
+export const signIn = async ({ email, password }: signInProps) => {
+  try {
+    const { account } = await createAdminClient();
+    const session = await account.createEmailPasswordSession(email, password);
+
+    cookies().set("appwrite-session", session.secret, {
+      path: "/",
+      httpOnly: true,
+      sameSite: "strict",
+      secure: true,
+    });
+
+    const user = await getUserInfo({ userId: session.userId });
+
+    console.log("user:", user);
+
+    return parseStringify(user);
+  } catch (error) {
+    console.error("Error", error);
+  }
+};
 
 
-        
-    return parseStringify(newUser);
-    } catch (error) {
-        console.error('Error', error)
-    }
-}
+export const signUp = async ({ password, ...userData }: SignUpParams) => {
+  const { email, firstName, lastName } = userData;
+
+  try {
+    const { account, database } = await createAdminClient();
+
+    // Create a new user account
+    const newUserAccount = await account.create(
+      ID.unique(), // Unique ID for the user
+      email,
+      password,
+      `${firstName} ${lastName}`
+    );
+
+    if (!newUserAccount) throw new Error("Error creating user");
+
+    console.log("User created in user.actions.tsx");
+
+    // Create a Dwolla customer
+    const dwollaCustomerUrl = await createDwollaCustomer({
+      ...userData,
+      type: "personal",
+    });
+
+    if (!dwollaCustomerUrl) throw new Error("Error creating Dwolla customer");
+
+    const dwollaCustomerId = extractCustomerIdFromUrl(dwollaCustomerUrl);
+
+    // Store user data in the database
+    const newUser = await database.createDocument(
+      DATABASE_ID!, // Ensure this environment variable is correctly set
+      USER_COLLECTION_ID!, // Ensure this environment variable is correctly set
+      ID.unique(), // Unique ID for the database document
+      {
+        ...userData, // Spread the user data
+        userId: newUserAccount.$id, // Add the newly created user account ID
+        dwollaCustomerId, // Dwolla customer ID
+        dwollaCustomerUrl, // Dwolla customer URL
+      }
+    );
+
+    console.log("New user document created:", newUser);
+
+    return newUser;
+  } catch (error) {
+    console.error("Signup Error:", error);
+    throw error; // Re-throw the error if you want to handle it further up the call stack
+  }
+};
+
+
+
 
 
 
@@ -128,28 +141,27 @@ export async function getLoggedInUser() {
   }
 
 
-  export const createLinkToken = async (user: User) => {
-   try {
-
+export const createLinkToken = async (user: User) => {
+  try {
     const tokenParams = {
       user: {
-      client_user_id: user.$id
-    },
-    client_name: `${user.firstName} ${user.lastNme}`,
-    products: ['auth'] as Products[],
-    language: 'en',
-    country_codes: ['US'] as CountryCode[],
-  }
+        client_user_id: user.$id,
+      },
+      client_name: `${user.firstName} ${user.lastNme}`,
+      products: ["auth"] as Products[],
+      language: "en",
+      country_codes: ["US"] as CountryCode[],
+    };
 
-  const response = await plaidClient.linkTokenCreate(tokenParams);
+    console.log(tokenParams);
 
-  return parseStringify({ linkToken: response.data.link_token })
-    
-   } catch (error) {
+    const response = await plaidClient.linkTokenCreate(tokenParams);
+
+    return parseStringify({ linkToken: response.data.link_token });
+  } catch (error) {
     console.log(error);
-    
-   } 
   }
+};
 
   export const createBankAccount = async ({
 userId,
@@ -241,9 +253,6 @@ sharableId,
        publicTokenExchange: "complete",
      });
    } catch (error) {
-     console.error("An error occurred while creating exchanging token:", error);
-   }
- }
-
-
-  
+     console.error("An error occurred while creating exchanging token:", error);
+   }
+ }
